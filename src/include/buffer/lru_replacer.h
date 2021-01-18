@@ -13,7 +13,9 @@
 #pragma once
 
 #include <list>
+#include <map>
 #include <mutex>  // NOLINT
+#include <unordered_map>
 #include <vector>
 
 #include "buffer/replacer.h"
@@ -47,6 +49,10 @@ class LRUReplacer : public Replacer {
 
  private:
   // TODO(student): implement me!
+  std::unordered_map<frame_id_t, int> frame_map;
+  int64_t timestamp;
+  int num_pages;
+  std::mutex replacer_mutex;
 };
 
 }  // namespace bustub

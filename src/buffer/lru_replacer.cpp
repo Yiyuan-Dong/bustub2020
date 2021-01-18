@@ -11,19 +11,58 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/lru_replacer.h"
+#include <cassert>
 
 namespace bustub {
 
-LRUReplacer::LRUReplacer(size_t num_pages) {}
+LRUReplacer::LRUReplacer(size_t num_pages) :timestamp(1), num_pages(num_pages){}
 
 LRUReplacer::~LRUReplacer() = default;
 
-bool LRUReplacer::Victim(frame_id_t *frame_id) { return false; }
+bool LRUReplacer::Victim(frame_id_t *frame_id) {
+  if (frame_map.empty()){
+    *frame_id = -1;
+    return false;
+  }
 
-void LRUReplacer::Pin(frame_id_t frame_id) {}
+  replacer_mutex.lock();
 
-void LRUReplacer::Unpin(frame_id_t frame_id) {}
+  int64_t min_timestamp = frame_map.begin()->second;
+  frame_id_t min_frame_id = frame_map.begin()->first;
 
-size_t LRUReplacer::Size() { return 0; }
+  for (const auto &p: frame_map){
+    if (p.second < min_timestamp){
+      min_timestamp = p.second;
+      min_frame_id = p.first;
+    }
+  }
+
+  auto ret = frame_map.erase(min_frame_id);
+  assert(ret > 0);
+
+  *frame_id = min_frame_id;
+
+  replacer_mutex.unlock();
+
+  return true;
+}
+
+void LRUReplacer::Pin(frame_id_t frame_id) {
+  replacer_mutex.lock();
+
+  frame_map.erase(frame_id);
+
+  replacer_mutex.unlock();
+}
+
+void LRUReplacer::Unpin(frame_id_t frame_id) {
+  replacer_mutex.lock();
+
+  frame_map.insert({frame_id, timestamp++});
+
+  replacer_mutex.unlock();
+}
+
+size_t LRUReplacer::Size() { return frame_map.size(); }
 
 }  // namespace bustub
