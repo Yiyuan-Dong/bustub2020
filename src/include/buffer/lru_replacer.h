@@ -51,7 +51,6 @@ class LRUReplacer : public Replacer {
   // TODO(student): implement me!
   std::unordered_map<frame_id_t, int> frame_map;
   int64_t timestamp;
-  int num_pages;
   std::mutex replacer_mutex;
 };
 

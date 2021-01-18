@@ -15,13 +15,13 @@
 
 namespace bustub {
 
-LRUReplacer::LRUReplacer(size_t num_pages) :timestamp(1), num_pages(num_pages){}
+LRUReplacer::LRUReplacer(size_t num_pages) : timestamp(1) {}
 
 LRUReplacer::~LRUReplacer() = default;
 
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
-  if (frame_map.empty()){
-    *frame_id = -1;
+  if (frame_map.empty()) {
+    *frame_id = INVALID_FRAME_ID;
     return false;
   }
 
@@ -30,8 +30,8 @@ bool LRUReplacer::Victim(frame_id_t *frame_id) {
   int64_t min_timestamp = frame_map.begin()->second;
   frame_id_t min_frame_id = frame_map.begin()->first;
 
-  for (const auto &p: frame_map){
-    if (p.second < min_timestamp){
+  for (const auto &p : frame_map) {
+    if (p.second < min_timestamp) {
       min_timestamp = p.second;
       min_frame_id = p.first;
     }
