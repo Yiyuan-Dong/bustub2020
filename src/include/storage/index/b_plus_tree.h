@@ -22,6 +22,8 @@
 namespace bustub {
 
 #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
+#define IN_TREE_INTERNAL_PAGE_TYPE BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>
+#define IN_TREE_LEAF_PAGE_TYPE BPlusTreeLeafPage<KeyType, RID, KeyComparator>
 
 /**
  * Main class providing the API for the Interactive B+ Tree.
@@ -78,6 +80,10 @@ class BPlusTree {
   void RemoveFromFile(const std::string &file_name, Transaction *transaction = nullptr);
   // expose for test purpose
   Page *FindLeafPage(const KeyType &key, bool leftMost = false);
+  // Dyy helper function
+  Page *SafelyGetFrame(page_id_t page_id, const std::string &logout_string);
+  // Dyy helper function
+  Page *SafelyNewPage(page_id_t *page_id, const std::string &logout_string);
 
  private:
   void StartNewTree(const KeyType &key, const ValueType &value);
@@ -101,6 +107,8 @@ class BPlusTree {
   void Redistribute(N *neighbor_node, N *node, int index);
 
   bool AdjustRoot(BPlusTreePage *node);
+
+  void SetRootPageId(int root_page_id);
 
   void UpdateRootPageId(int insert_record = 0);
 

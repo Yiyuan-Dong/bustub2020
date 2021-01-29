@@ -72,6 +72,7 @@ class GenericKey {
 
 /**
  * Function object returns true if lhs < rhs, used for trees
+ * Dyy: really? I think object returns -1 if lhs < rhs
  */
 template <size_t KeySize>
 class GenericComparator {

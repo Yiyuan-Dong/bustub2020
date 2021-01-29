@@ -18,7 +18,7 @@
 namespace bustub {
 
 #define B_PLUS_TREE_LEAF_PAGE_TYPE BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>
-#define LEAF_PAGE_HEADER_SIZE 28
+#define LEAF_PAGE_HEADER_SIZE 32 // Because I add a prev page pointer!
 #define LEAF_PAGE_SIZE ((PAGE_SIZE - LEAF_PAGE_HEADER_SIZE) / sizeof(MappingType))
 
 /**
@@ -35,27 +35,34 @@ namespace bustub {
  *  ---------------------------------------------------------------------
  * | PageType (4) | LSN (4) | CurrentSize (4) | MaxSize (4) |
  *  ---------------------------------------------------------------------
- *  -----------------------------------------------
- * | ParentPageId (4) | PageId (4) | NextPageId (4)
- *  -----------------------------------------------
+ *  ---------------------------------------------------------------------
+ * | ParentPageId (4) | PageId (4) | NextPageId (4) | PrevPageId (4)
+ *  ---------------------------------------------------------------------
  */
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeLeafPage : public BPlusTreePage {
  public:
   // After creating a new leaf page from buffer pool, must call initialize
   // method to set default values
-  void Init(page_id_t page_id, page_id_t parent_id = INVALID_PAGE_ID, int max_size = LEAF_PAGE_SIZE);
+  // Save one slot for overflow
+  void Init(page_id_t page_id, page_id_t parent_id = INVALID_PAGE_ID, int max_size = LEAF_PAGE_SIZE - 1);
   // helper methods
   page_id_t GetNextPageId() const;
   void SetNextPageId(page_id_t next_page_id);
+  page_id_t GetPrevPageId() const;
+  void SetPrevPageId(page_id_t prev_page_id);
   KeyType KeyAt(int index) const;
+  ValueType ValueAt(int index) const;
   int KeyIndex(const KeyType &key, const KeyComparator &comparator) const;
   const MappingType &GetItem(int index);
+  bool CheckDuplicated(const KeyType &key, const KeyComparator &comparator) const;
 
   // insert and delete methods
   int Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator);
   bool Lookup(const KeyType &key, ValueType *value, const KeyComparator &comparator) const;
   int RemoveAndDeleteRecord(const KeyType &key, const KeyComparator &comparator);
+  void RemoveAt(int index);
+  void InsertAt(int index, const KeyType &key, const ValueType &value);
 
   // Split and Merge utility methods
   void MoveHalfTo(BPlusTreeLeafPage *recipient);
@@ -63,11 +70,13 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void MoveFirstToEndOf(BPlusTreeLeafPage *recipient);
   void MoveLastToFrontOf(BPlusTreeLeafPage *recipient);
 
+
  private:
   void CopyNFrom(MappingType *items, int size);
   void CopyLastFrom(const MappingType &item);
   void CopyFirstFrom(const MappingType &item);
   page_id_t next_page_id_;
+  page_id_t prev_page_id_;
   MappingType array[0];
 };
 }  // namespace bustub
