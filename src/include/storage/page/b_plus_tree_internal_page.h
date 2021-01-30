@@ -36,8 +36,9 @@ INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeInternalPage : public BPlusTreePage {
  public:
   // must call initialize method after "create" a new node
-  // Note: the last slot of `array` is saved in case of overflow
-  void Init(page_id_t page_id, page_id_t parent_id = INVALID_PAGE_ID, int max_size = INTERNAL_PAGE_SIZE - 1);
+  // Note: the last slot of `array` is saved in case of overflow,
+  // thus size == maxsize means overflow!
+  void Init(page_id_t page_id, page_id_t parent_id = INVALID_PAGE_ID, int max_size = INTERNAL_PAGE_SIZE);
 
   KeyType KeyAt(int index) const;
   void SetKeyAt(int index, const KeyType &key);

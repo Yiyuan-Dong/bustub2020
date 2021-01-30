@@ -29,7 +29,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id
   SetPageType(IndexPageType::INTERNAL_PAGE);
   SetSize(0);
   SetPageId(page_id);
-  SetPageId(parent_id);
+  SetParentPageId(parent_id);
   SetMaxSize(max_size);
 }
 /*
@@ -38,7 +38,6 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id
  */
 INDEX_TEMPLATE_ARGUMENTS
 KeyType B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const {
-  assert(index < GetSize());
   return array[index].first;
 }
 
@@ -59,7 +58,7 @@ INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const {
   int size = GetSize();
 
-  for (int index = 1; index <= size; ++index) {
+  for (int index = 0; index <= size; ++index) {
     if (ValueAt(index) == value){
       return index;
     }
@@ -74,7 +73,6 @@ int B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const {
  */
 INDEX_TEMPLATE_ARGUMENTS
 ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const {
-  assert(index <= GetSize());
   return array[index].second;
 }
 
@@ -229,7 +227,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(int index) {
   for (int i = index; i < size - 1; ++i){
     array[i] = array[i + 1];
   }
-  SetSize(size - 1);
+  IncreaseSize(-1);
 }
 
 /*

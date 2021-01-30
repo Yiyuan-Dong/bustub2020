@@ -71,7 +71,7 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   // 2.     If R is dirty, write it back to the disk.
   // 3.     Delete R from the page table and insert P.
   // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
-
+  assert(page_id != INVALID_PAGE_ID);
   latch_.lock();
 
   frame_id_t frame_id;
@@ -195,7 +195,7 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
   // 2.   If P exists, but has a non-zero pin-count, return false. Someone is using the page.
   // 3.   Otherwise, P can be deleted. Remove P from the page table, reset its metadata and return it to the free list.
 
-  assert(page_id != INVALID_FRAME_ID);
+  assert(page_id != INVALID_PAGE_ID);
   latch_.lock();
 
   frame_id_t frame_id = GetFrame(page_id);
