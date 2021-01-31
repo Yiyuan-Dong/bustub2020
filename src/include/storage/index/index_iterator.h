@@ -24,7 +24,7 @@ class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
   IndexIterator();
-  IndexIterator(page_id_t page_id, int index, BufferPoolManager* bfm_ptr);
+  IndexIterator(page_id_t page_id, int index, BufferPoolManager* bpm_ptr);
   ~IndexIterator();
 
   bool isEnd();
@@ -47,6 +47,7 @@ class IndexIterator {
   // add your own private member variables here
   page_id_t page_id_;
   int index_;
+  B_PLUS_TREE_LEAF_PAGE_TYPE* leaf_ptr_;
   BufferPoolManager* buffer_pool_manager_;
 };
 

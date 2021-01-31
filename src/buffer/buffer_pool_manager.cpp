@@ -207,6 +207,7 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
 
   Page *page_ptr = GetPage(frame_id);
   if (page_ptr->GetPinCount() > 0) {
+    assert(false);
     latch_.unlock();
     return false;
   }

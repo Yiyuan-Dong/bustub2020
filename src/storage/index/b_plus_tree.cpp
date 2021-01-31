@@ -129,6 +129,7 @@ bool BPLUSTREE_TYPE::InsertIntoLeaf(const KeyType &key, const ValueType &value, 
       reinterpret_cast<IN_TREE_LEAF_PAGE_TYPE*>(page_ptr->GetData());
 
   if (leaf_ptr->CheckDuplicated(key, comparator_)){
+    buffer_pool_manager_->UnpinPage(page_ptr->GetPageId(), true);
     return false;
   }
 
@@ -253,7 +254,29 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &ke
  * necessary.
  */
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {}
+void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
+  if (IsEmpty()){ return; }
+
+  Page* leaf_page_ptr = FindLeafPage(key, false);
+  IN_TREE_LEAF_PAGE_TYPE* leaf_ptr =
+    reinterpret_cast<IN_TREE_LEAF_PAGE_TYPE*>(leaf_page_ptr->GetData());
+
+  if (!leaf_ptr->CheckDuplicated(key, comparator_)){
+    buffer_pool_manager_->UnpinPage(leaf_ptr->GetPageId(), false);
+    return;
+  }
+  int index = leaf_ptr->KeyIndex(key, comparator_);
+  leaf_ptr->RemoveAt(index);
+
+  bool ret = false;
+  if (leaf_ptr->GetSize() < leaf_ptr->GetMinSize()){
+    ret = CoalesceOrRedistribute<IN_TREE_LEAF_PAGE_TYPE>(leaf_ptr, transaction);
+  }
+
+  if (!ret){
+    buffer_pool_manager_->UnpinPage(leaf_ptr->GetPageId(), true);
+  }
+}
 
 /*
  * User needs to first find the sibling of input page. If sibling's size + input
@@ -265,6 +288,76 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {}
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
 bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
+  if (node->IsRootPage()){
+    return AdjustRoot(node);
+  }
+
+  page_id_t parent_page_id;
+  page_id_t prev_page_id = INVALID_PAGE_ID;
+  page_id_t next_page_id = INVALID_PAGE_ID;
+  Page *parent_page_ptr;
+  Page *prev_page_ptr;
+  Page *next_page_ptr;
+  IN_TREE_INTERNAL_PAGE_TYPE* parent_ptr;
+  N *prev_node;
+  N *next_node;
+
+  parent_page_id = node->GetParentPageId();
+  parent_page_ptr = SafelyGetFrame(parent_page_id,
+                                         "Out of memory in `CoalesceOrRedistribute`, get parent");
+  parent_ptr = reinterpret_cast<IN_TREE_INTERNAL_PAGE_TYPE*>(parent_page_ptr->GetData());
+
+  int node_index = parent_ptr->ValueIndex(node->GetPageId());
+  if (node_index > 0){
+    prev_page_id = parent_ptr->ValueAt(node_index - 1);
+    prev_page_ptr = SafelyGetFrame(prev_page_id,
+                                     "Out of memory in `CoalesceOrRedistribute`, get prev node");
+    prev_node = reinterpret_cast<N*>(prev_page_ptr->GetData());
+
+    if (prev_node->GetSize() > prev_node->GetMinSize()){
+      Redistribute(prev_node, node, 1);
+
+      buffer_pool_manager_->UnpinPage(prev_page_id, true);
+      buffer_pool_manager_->UnpinPage(parent_page_id, true);
+
+      return false;
+    }
+  }
+
+  if (node_index != parent_ptr->GetSize() - 1){
+    next_page_id = parent_ptr->ValueAt(node_index + 1);
+    next_page_ptr = SafelyGetFrame(next_page_id,
+                                   "Out of memory in `CoalesceOrRedistribute`, get next node");
+    next_node = reinterpret_cast<N*>(next_page_ptr->GetData());
+    if (next_node->GetSize() > next_node->GetMinSize()){
+      Redistribute(next_node, node, 0);
+      if (node_index > 0){
+        buffer_pool_manager_->UnpinPage(prev_page_id, false);
+      }
+      buffer_pool_manager_->UnpinPage(next_page_id, true);
+      buffer_pool_manager_->UnpinPage(parent_page_id, true);
+      return false;
+    }
+  }
+
+  bool ret = false;
+  if (prev_page_id != INVALID_PAGE_ID){
+    ret = Coalesce(&prev_node, &node, &parent_ptr, node_index, transaction);
+
+    buffer_pool_manager_->UnpinPage(prev_page_id, true);
+    if (next_page_id != INVALID_PAGE_ID){
+      buffer_pool_manager_->UnpinPage(next_page_id, false);
+    }
+    if (!ret){
+      buffer_pool_manager_->UnpinPage(parent_page_id, true);
+    }
+    return true;
+  }
+
+  ret = Coalesce(&node, &next_node, &parent_ptr, node_index + 1, transaction);
+  if (!ret){
+    buffer_pool_manager_->UnpinPage(parent_page_id, true);
+  }
   return false;
 }
 
@@ -285,6 +378,32 @@ template <typename N>
 bool BPLUSTREE_TYPE::Coalesce(N **neighbor_node, N **node,
                               BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> **parent, int index,
                               Transaction *transaction) {
+  if ((*node)->IsLeafPage()){
+    IN_TREE_LEAF_PAGE_TYPE* op_node =
+      reinterpret_cast<IN_TREE_LEAF_PAGE_TYPE*>(*node);
+    IN_TREE_LEAF_PAGE_TYPE* op_neighbor_node =
+      reinterpret_cast<IN_TREE_LEAF_PAGE_TYPE*>(*neighbor_node);
+
+    op_node->MoveAllTo(op_neighbor_node);
+  }
+  else{
+    IN_TREE_INTERNAL_PAGE_TYPE* op_node =
+      reinterpret_cast<IN_TREE_INTERNAL_PAGE_TYPE*>(*node);
+    IN_TREE_INTERNAL_PAGE_TYPE* op_neighbor_node =
+      reinterpret_cast<IN_TREE_INTERNAL_PAGE_TYPE*>(*neighbor_node);
+
+    KeyType middle_key = (*parent)->KeyAt(index);
+    op_node->MoveAllTo(op_neighbor_node, middle_key, buffer_pool_manager_);
+  }
+
+  page_id_t page_id = (*node)->GetPageId();
+  buffer_pool_manager_->UnpinPage(page_id, true);
+  buffer_pool_manager_->DeletePage(page_id);
+
+  (*parent)->Remove(index);
+  if ((*parent)->GetSize() < (*parent)->GetMinSize()){
+    return CoalesceOrRedistribute(*parent, transaction);
+  }
   return false;
 }
 
@@ -299,7 +418,58 @@ bool BPLUSTREE_TYPE::Coalesce(N **neighbor_node, N **node,
  */
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
-void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {}
+void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {
+  page_id_t parent_page_id = node->GetParentPageId();
+  Page *parent_page_ptr = SafelyGetFrame(parent_page_id,
+                                         "Out of memory in `Redistribute`");
+  IN_TREE_INTERNAL_PAGE_TYPE* parent_ptr =
+      reinterpret_cast<IN_TREE_INTERNAL_PAGE_TYPE*>(parent_page_ptr->GetData());
+
+  if (node->IsLeafPage()){
+    IN_TREE_LEAF_PAGE_TYPE* op_node =
+      reinterpret_cast<IN_TREE_LEAF_PAGE_TYPE*>(node);
+    IN_TREE_LEAF_PAGE_TYPE* op_neighbor_node =
+      reinterpret_cast<IN_TREE_LEAF_PAGE_TYPE*>(neighbor_node);
+
+    if (index == 0){
+      op_neighbor_node->MoveFirstToEndOf(op_node);
+
+      int node_index = parent_ptr->ValueIndex(op_neighbor_node->GetPageId());
+      parent_ptr->SetKeyAt(node_index, op_neighbor_node->KeyAt(0));
+    }
+    else{
+      op_neighbor_node->MoveLastToFrontOf(op_node);
+
+      int node_index = parent_ptr->ValueIndex(op_node->GetPageId());
+      parent_ptr->SetKeyAt(node_index, op_node->KeyAt(0));
+    }
+  }
+  else{
+    IN_TREE_INTERNAL_PAGE_TYPE* op_node =
+      reinterpret_cast<IN_TREE_INTERNAL_PAGE_TYPE*>(node);
+    IN_TREE_INTERNAL_PAGE_TYPE* op_neighbor_node =
+      reinterpret_cast<IN_TREE_INTERNAL_PAGE_TYPE*>(neighbor_node);
+
+    if (index == 0){
+      int node_index = parent_ptr->ValueIndex(op_neighbor_node->GetPageId());
+      KeyType middle_key = parent_ptr->KeyAt(node_index);
+      KeyType next_middle_key = op_neighbor_node->KeyAt(1);
+
+      op_neighbor_node->MoveFirstToEndOf(op_node, middle_key, buffer_pool_manager_);
+      parent_ptr->SetKeyAt(node_index, next_middle_key);
+    }
+    else{
+      int node_index = parent_ptr->ValueIndex(op_node->GetPageId());
+      KeyType middle_key = parent_ptr->KeyAt(node_index);
+      KeyType next_middle_key = op_neighbor_node->KeyAt(op_neighbor_node->GetSize() - 1);
+
+      op_neighbor_node->MoveLastToFrontOf(op_node, middle_key, buffer_pool_manager_);
+      parent_ptr->SetKeyAt(node_index, next_middle_key);
+    }
+  }
+
+  buffer_pool_manager_->UnpinPage(parent_page_id, true);
+}
 /*
  * Update root page if necessary
  * NOTE: size of root page can be less than min size and this method is only
@@ -311,7 +481,39 @@ void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {}
  * happend
  */
 INDEX_TEMPLATE_ARGUMENTS
-bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) { return false; }
+bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) {
+  if (old_root_node->GetSize() > 1){
+    return false;
+  }
+
+  page_id_t new_root_id;
+  if (old_root_node->IsLeafPage()){
+    if (old_root_node->GetSize() == 1){
+      return false;
+    }
+    new_root_id = INVALID_PAGE_ID;
+  }
+  else{
+    IN_TREE_INTERNAL_PAGE_TYPE* old_root_internal_node =
+      reinterpret_cast<IN_TREE_INTERNAL_PAGE_TYPE*>(old_root_node);
+    new_root_id = old_root_internal_node->RemoveAndReturnOnlyChild();
+
+    Page* new_root_page_ptr = SafelyGetFrame(new_root_id, "Out of memory in `AdjustRoot");
+    IN_TREE_INTERNAL_PAGE_TYPE* new_root_ptr =
+      reinterpret_cast<IN_TREE_INTERNAL_PAGE_TYPE*>(new_root_page_ptr->GetData());
+    new_root_ptr->SetParentPageId(INVALID_PAGE_ID);
+    buffer_pool_manager_->UnpinPage(new_root_id, true);
+  }
+
+  root_page_id_ = new_root_id;
+  UpdateRootPageId(0);
+
+  page_id_t old_root_id = old_root_node->GetPageId();
+  buffer_pool_manager_->UnpinPage(old_root_id, true);
+  buffer_pool_manager_->DeletePage(old_root_id);
+
+  return true;
+}
 
 /*****************************************************************************
  * INDEX ITERATOR

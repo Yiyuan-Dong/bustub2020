@@ -12,34 +12,42 @@ namespace bustub {
  * set your own input parameters
  */
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::IndexIterator() = default;
+INDEXITERATOR_TYPE::IndexIterator()
+    :page_id_(INVALID_PAGE_ID), index_(-1), buffer_pool_manager_(nullptr){};
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::IndexIterator(page_id_t page_id, int index, BufferPoolManager* bfm_ptr)
-    :page_id_(page_id), index_(index), buffer_pool_manager_(bfm_ptr){};
+INDEXITERATOR_TYPE::IndexIterator(page_id_t page_id, int index, BufferPoolManager* bpm_ptr)
+    :page_id_(page_id), index_(index), buffer_pool_manager_(bpm_ptr) {
+  leaf_ptr_ = SafelyGetLeafPage();
+};
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::~IndexIterator() = default;
+INDEXITERATOR_TYPE::~IndexIterator(){
+  if (page_id_ != INVALID_PAGE_ID){
+    buffer_pool_manager_->UnpinPage(page_id_, false);
+  }
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 bool INDEXITERATOR_TYPE::isEnd() { return page_id_ == INVALID_PAGE_ID; }
 
 INDEX_TEMPLATE_ARGUMENTS
 const MappingType &INDEXITERATOR_TYPE::operator*() {
-  B_PLUS_TREE_LEAF_PAGE_TYPE* leaf_ptr = SafelyGetLeafPage();
-  assert(leaf_ptr != nullptr);
-  return leaf_ptr->GetItem(index_);
+  assert(leaf_ptr_ != nullptr);
+  return leaf_ptr_->GetItem(index_);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE &INDEXITERATOR_TYPE::operator++() {
-  B_PLUS_TREE_LEAF_PAGE_TYPE* leaf_ptr = SafelyGetLeafPage();
-  if (leaf_ptr == nullptr){
+  if (leaf_ptr_ == nullptr){
     return *this;
   }
 
-  if (index_ == leaf_ptr->GetSize() - 1){
-    page_id_ = leaf_ptr->GetNextPageId();
+  if (index_ == leaf_ptr_->GetSize() - 1){
+    page_id_t old_page_id = page_id_;
+    page_id_ = leaf_ptr_->GetNextPageId();
+    buffer_pool_manager_->UnpinPage(old_page_id, false);
+    leaf_ptr_ = SafelyGetLeafPage();
     index_ = 0;
   }
   else{

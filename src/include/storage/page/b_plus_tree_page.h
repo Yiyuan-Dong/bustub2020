@@ -53,7 +53,6 @@ class BPlusTreePage {
   int GetMaxSize() const;
   void SetMaxSize(int max_size);
   int GetMinSize() const;
-
   page_id_t GetParentPageId() const;
   void SetParentPageId(page_id_t parent_page_id);
 
