@@ -24,7 +24,7 @@ class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
   IndexIterator();
-  IndexIterator(page_id_t page_id, int index, BufferPoolManager* bpm_ptr);
+  IndexIterator(Page* page_ptr, int index, BufferPoolManager* bpm_ptr);
   ~IndexIterator();
 
   bool isEnd();
@@ -41,12 +41,13 @@ class IndexIterator {
     return page_id_ != itr.page_id_ || index_ != itr.index_;
   }
 
-  B_PLUS_TREE_LEAF_PAGE_TYPE* SafelyGetLeafPage();
+  B_PLUS_TREE_LEAF_PAGE_TYPE* SafelyGetAndLatchLeafPage();
 
  private:
   // add your own private member variables here
   page_id_t page_id_;
   int index_;
+  Page* page_ptr_;
   B_PLUS_TREE_LEAF_PAGE_TYPE* leaf_ptr_;
   BufferPoolManager* buffer_pool_manager_;
 };

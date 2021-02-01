@@ -148,6 +148,12 @@ TEST(BPlusTreeTests, DeleteTest2) {
     tree.Remove(index_key, transaction);
   }
 
+  
+  for (auto key : remove_keys) {
+    index_key.SetFromInteger(key);
+    tree.Remove(index_key, transaction);
+  }
+
   start_key = 2;
   current_key = start_key;
   int64_t size = 0;

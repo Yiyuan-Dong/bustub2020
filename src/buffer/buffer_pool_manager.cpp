@@ -13,6 +13,7 @@
 #include "buffer/buffer_pool_manager.h"
 
 #include <list>
+#include <common/logger.h>
 
 namespace bustub {
 
@@ -57,6 +58,8 @@ frame_id_t BufferPoolManager::GetAvailablePage() {
     return frame_id;
   }
 
+  LOG_DEBUG("--Out of memory!\n");
+  PrintOut();
   return INVALID_FRAME_ID;
 }
 
@@ -227,6 +230,15 @@ void BufferPoolManager::FlushAllPagesImpl() {
 
   for (const auto &page_pair : page_table_) {
     FlushPageImpl(page_pair.first);
+  }
+}
+
+void BufferPoolManager::PrintOut() {
+  LOG_DEBUG("\n  pool_size_:%zu", pool_size_);
+  LOG_DEBUG("\n  replacer size:%zu", replacer_->Size());
+  for (size_t i = 0; i < pool_size_; ++i){
+    LOG_DEBUG("\n  pages[%zu]: page_id:%d pin_count: %d\n",
+              i, pages_[i].GetPageId(), pages_[i].pin_count_);
   }
 }
 

@@ -79,11 +79,17 @@ class BPlusTree {
   // read data from file and remove one by one
   void RemoveFromFile(const std::string &file_name, Transaction *transaction = nullptr);
   // expose for test purpose
-  Page *FindLeafPage(const KeyType &key, bool leftMost = false);
+  Page *FindLeafPage(const KeyType &key, bool leftMost = false, int mode = 0, Transaction* transaction = nullptr);
   // Dyy helper function
   Page *SafelyGetFrame(page_id_t page_id, const std::string &logout_string);
   // Dyy helper function
   Page *SafelyNewPage(page_id_t *page_id, const std::string &logout_string);
+  // Dyy helper function
+  bool CheckSafe(BPlusTreePage* tree_ptr, int mode, bool is_root);
+  // Dyy helper function
+  void ReleaseLatchQueue(Transaction* transaction, int mode);
+  // Dyy helper function
+  void DeletePages(Transaction* transaction);
 
  private:
   void StartNewTree(const KeyType &key, const ValueType &value);
@@ -124,6 +130,7 @@ class BPlusTree {
   KeyComparator comparator_;
   int leaf_max_size_;
   int internal_max_size_;
+  ReaderWriterLatch root_id_latch_;
 };
 
 }  // namespace bustub

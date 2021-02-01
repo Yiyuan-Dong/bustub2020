@@ -118,7 +118,7 @@ const MappingType &B_PLUS_TREE_LEAF_PAGE_TYPE::GetItem(int index) {
 INDEX_TEMPLATE_ARGUMENTS
 bool B_PLUS_TREE_LEAF_PAGE_TYPE::CheckDuplicated(const KeyType &key, const KeyComparator &comparator) const {
   int index = KeyIndex(key, comparator);
-  return comparator(KeyAt(index), key) == 0;
+  return index < GetSize() && comparator(KeyAt(index), key) == 0;
 }
 
 /*****************************************************************************

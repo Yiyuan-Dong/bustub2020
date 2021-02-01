@@ -90,7 +90,10 @@ TEST(BPlusTreeTests, InsertTest2) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  std::vector<int64_t> keys = {5, 4, 3, 2, 1};
+  std::vector<int64_t> keys = {};
+  for (int i = 10000; i > 0; --i){ 
+    keys.push_back(i);
+  }
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
