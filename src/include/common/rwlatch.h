@@ -85,6 +85,20 @@ class ReaderWriterLatch {
     }
   }
 
+  /**
+   * Dyy function!
+   * Try to get the read lock. If can't get, return false; else
+   * return true
+   */
+  bool TryRLock(){
+    std::unique_lock<mutex_t> latch(mutex_);
+    if (writer_entered_ || reader_count_ == MAX_READERS){
+      return false;
+    }
+    reader_count_++;
+    return true;
+  }
+
  private:
   mutex_t mutex_;
   cond_t writer_;

@@ -47,6 +47,8 @@ enum class ExceptionType {
   OUT_OF_MEMORY = 9,
   /** Method not implemented. */
   NOT_IMPLEMENTED = 11,
+  /** Dyy type: Deadlock! */
+  DEAD_LOCK = 12
 };
 
 class Exception : public std::runtime_error {

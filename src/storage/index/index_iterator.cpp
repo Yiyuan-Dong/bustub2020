@@ -86,7 +86,9 @@ B_PLUS_TREE_LEAF_PAGE_TYPE* INDEXITERATOR_TYPE::SafelyGetAndLatchLeafPage()
     throw Exception(ExceptionType::OUT_OF_MEMORY, "Out of memory in iterator");
   }
 
-  page_ptr_->RLatch();
+  if (!page_ptr_->TryRLatch()){
+    throw Exception(ExceptionType::DEAD_LOCK, "Fail to get read latch in iterator");
+  }
 
   return reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE*>(page_ptr_->GetData());
 }
