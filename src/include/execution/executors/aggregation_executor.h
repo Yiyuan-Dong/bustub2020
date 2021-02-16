@@ -190,14 +190,16 @@ class AggregationExecutor : public AbstractExecutor {
     return {vals};
   }
 
+  Tuple GenerateOutput();
+
  private:
   /** The aggregation plan node. */
   const AggregationPlanNode *plan_;
   /** The child executor whose tuples we are aggregating. */
   std::unique_ptr<AbstractExecutor> child_;
   /** Simple aggregation hash table. */
-  // Uncomment me! SimpleAggregationHashTable aht_;
+  SimpleAggregationHashTable aht_;
   /** Simple aggregation hash table iterator. */
-  // Uncomment me! SimpleAggregationHashTable::Iterator aht_iterator_;
+  SimpleAggregationHashTable::Iterator aht_iterator_;
 };
 }  // namespace bustub

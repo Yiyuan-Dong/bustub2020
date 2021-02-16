@@ -24,6 +24,9 @@ namespace bustub {
 
 /**
  * IndexScanExecutor executes an index scan over a table.
+ *
+ * Dyy: I think it would be better if it is a template class with <KeySize>,
+ *      then we can replace every '8' with 'KeySize'
  */
 
 class IndexScanExecutor : public AbstractExecutor {
@@ -41,8 +44,14 @@ class IndexScanExecutor : public AbstractExecutor {
 
   bool Next(Tuple *tuple, RID *rid) override;
 
+  Tuple GenerateTuple(Tuple &tuple);
+
  private:
   /** The index scan plan node to be executed. */
   const IndexScanPlanNode *plan_;
+  B_PLUS_TREE_INDEX_ITERATOR_TYPE index_iter_;
+  B_PLUS_TREE_INDEX_ITERATOR_TYPE end_iter_;
+  TableHeap *table_heap_ptr_;
+  TableMetadata* table_metadata_;
 };
 }  // namespace bustub

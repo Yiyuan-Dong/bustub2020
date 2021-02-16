@@ -15,6 +15,9 @@
 #include "execution/executor_context.h"
 #include "storage/table/tuple.h"
 
+#define B_PLUS_TREE_INDEX_ITERATOR_TYPE IndexIterator<GenericKey<8>, RID, GenericComparator<8>>
+#define B_PLUS_TREE_INDEX_TYPE BPlusTreeIndex<GenericKey<8>, RID, GenericComparator<8>>
+
 namespace bustub {
 /**
  * AbstractExecutor implements the Volcano tuple-at-a-time iterator model.

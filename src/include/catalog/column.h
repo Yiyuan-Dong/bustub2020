@@ -44,9 +44,13 @@ class Column {
    * @param type type of column
    * @param length length of the varlen
    * @param expr expression used to create this column
+   *
+   * Dyy: Is there any different? As far as I'm concerned `length` is not used.
+   *      It seems like a bug, let me fix it :)
    */
   Column(std::string column_name, TypeId type, uint32_t length, const AbstractExpression *expr = nullptr)
-      : column_name_(std::move(column_name)), column_type_(type), fixed_length_(TypeSize(type)), expr_{expr} {
+      : column_name_(std::move(column_name)), column_type_(type), fixed_length_(TypeSize(type)),
+        variable_length_(length), expr_{expr} {
     BUSTUB_ASSERT(type == TypeId::VARCHAR, "Wrong constructor for non-VARCHAR type.");
   }
 
