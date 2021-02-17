@@ -28,6 +28,7 @@
 #include "execution/executors/aggregation_executor.h"
 #include "execution/executors/insert_executor.h"
 #include "execution/executors/nested_loop_join_executor.h"
+#include "execution/executors/nested_index_join_executor.h"
 #include "execution/expressions/aggregate_value_expression.h"
 #include "execution/expressions/column_value_expression.h"
 #include "execution/expressions/comparison_expression.h"
