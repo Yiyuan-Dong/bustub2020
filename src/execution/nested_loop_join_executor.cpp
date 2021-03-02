@@ -38,6 +38,10 @@ Tuple NestedLoopJoinExecutor::CombineTuple(Tuple *left_tuple, Tuple *right_tuple
   return Tuple{res_values, GetOutputSchema()};
 }
 
+/**
+ * I also think there needs no modification. It's child node's duty to
+ * manage lock
+ */
 bool NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) {
   Tuple right_tuple;
   RID temp_rid;

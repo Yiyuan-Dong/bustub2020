@@ -27,22 +27,47 @@ void UpdateExecutor::Init() {
     child_executor_->Init();
 }
 
+void UpdateExecutor::LockInNode(RID &rid) {
+  Transaction* txn = GetExecutorContext()->GetTransaction();
+  if (txn->GetSharedLockSet()->find(rid) != txn->GetSharedLockSet()->end()){
+    GetExecutorContext()->GetLockManager()->LockUpgrade(txn, rid);
+    return;
+  }
+  if (txn->GetExclusiveLockSet()->find(rid) == txn->GetExclusiveLockSet()->end()){
+    GetExecutorContext()->GetLockManager()->LockExclusive(txn, rid);
+  }
+}
+
 void UpdateExecutor::UpdateTuple(Tuple &tuple, RID &rid){
   Tuple updated_tuple{GenerateUpdatedTuple(tuple)};
   TableHeap* table_heap_ptr = table_info_->table_.get();
+  TableWriteRecord table_record{rid,
+                                WType::UPDATE,
+                                tuple,
+                                table_heap_ptr};
+  GetExecutorContext()->GetTransaction()->AppendTableWriteRecord(table_record);
   table_heap_ptr->UpdateTuple(updated_tuple, rid, GetExecutorContext()->GetTransaction());
   for (auto &index_info:index_info_vector_){
       B_PLUS_TREE_INDEX_TYPE *b_plus_tree_index
               = reinterpret_cast<B_PLUS_TREE_INDEX_TYPE*>(index_info->index_.get());
+    IndexWriteRecord index_record{rid,
+                                  plan_->TableOid(),
+                                  WType::UPDATE,
+                                  tuple,
+                                  index_info->index_oid_,
+                                  GetExecutorContext()->GetCatalog()};
+    GetExecutorContext()->GetTransaction()->AppendTableWriteRecord(index_record);
       // Update in index means delete and insert ?
       b_plus_tree_index->DeleteEntry(tuple.KeyFromTuple(table_info_->schema_,
                                                         index_info->key_schema_,
                                                         index_info->index_->GetMetadata()->GetKeyAttrs()),
-                                     rid,GetExecutorContext()->GetTransaction());
+                                     rid,
+                                     GetExecutorContext()->GetTransaction());
       b_plus_tree_index->InsertEntry(updated_tuple.KeyFromTuple(table_info_->schema_,
                                                                index_info->key_schema_,
                                                                index_info->index_->GetMetadata()->GetKeyAttrs()),
-                                     rid, GetExecutorContext()->GetTransaction());
+                                     rid,
+                                     GetExecutorContext()->GetTransaction());
   }
 }
 
@@ -50,6 +75,8 @@ bool UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
   if (!child_executor_->Next(tuple, rid)){
     return false;
   }
+
+  LockInNode(*rid);
   UpdateTuple(*tuple, *rid);
   return true;
 }

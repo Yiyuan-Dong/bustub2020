@@ -46,6 +46,13 @@ Tuple AggregationExecutor::GenerateOutput() {
   return Tuple(values, GetOutputSchema());
 }
 
+/**
+ * Project4 Dyy:
+ * I don't think I need to do any change here. aggregation hash table is a private
+ * object for each aggregation node. That means there is no concurrency problem.
+ * In 'Init()' we need to access data via child node. So its child node's expression
+ * to manage lock
+ */
 bool AggregationExecutor::Next(Tuple *tuple, RID *rid) {
   while (true){
     if (aht_iterator_ == aht_.End()){

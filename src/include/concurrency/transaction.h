@@ -127,7 +127,7 @@ class TransactionAbortException : public std::exception {
       case AbortReason::LOCK_ON_SHRINKING:
         return "Transaction " + std::to_string(txn_id_) +
                " aborted because it can not take locks in the shrinking state\n";
-      case AbortReason::UNLOCK_ON_SHRINKING:
+      case AbortReason::UNLOCK_ON_SHRINKING:  // DYY: Well, seems confusing
         return "Transaction " + std::to_string(txn_id_) +
                " aborted because it can not excute unlock in the shrinking state\n";
       case AbortReason::UPGRADE_CONFLICT:

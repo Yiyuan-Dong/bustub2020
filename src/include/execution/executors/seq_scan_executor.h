@@ -39,6 +39,10 @@ class SeqScanExecutor : public AbstractExecutor {
 
   Tuple GenerateTuple(Tuple &tuple);
 
+  void LockInNode(RID &rid);
+
+  void UnlockInNode(RID &rid);
+
   const Schema *GetOutputSchema() override { return plan_->OutputSchema(); }
 
  private:

@@ -23,7 +23,6 @@ void SeqScanExecutor::Init() {
   table_heap_ptr_ = table_metadata_ptr_->table_.get();
   page_id_t first_page_id = table_heap_ptr_->GetFirstPageId();
 
-
   Page *page_ptr = bpm_ptr->FetchPage(first_page_id);
 
   RID rid{};
@@ -44,10 +43,44 @@ Tuple SeqScanExecutor::GenerateTuple(Tuple &tuple) {
   return {res_values, GetOutputSchema()};
 }
 
+void SeqScanExecutor::LockInNode(RID &rid) {
+  Transaction *txn = GetExecutorContext()->GetTransaction();
+  if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED){
+    return ;
+  }
+  if (txn->GetExclusiveLockSet()->find(rid) != txn->GetExclusiveLockSet()->end() ||
+      txn->GetSharedLockSet()->find(rid) != txn->GetSharedLockSet()->end()){
+    return ;
+  }
+  GetExecutorContext()->GetLockManager()->LockShared(txn, rid);
+}
+
+void SeqScanExecutor::UnlockInNode(RID &rid) {
+  Transaction *txn = GetExecutorContext()->GetTransaction();
+  // If in READ_COMMITTED isolation level and txn never lock this Record before this read
+  if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED &&
+      txn->GetExclusiveLockSet()->find(rid) == txn->GetExclusiveLockSet()->end()){
+    GetExecutorContext()->GetLockManager()->Unlock(txn, rid);
+  }
+}
+
 bool SeqScanExecutor::Next(Tuple *tuple, RID *rid) {
   while (table_iter_ != table_heap_ptr_->End()){
     *tuple = *(table_iter_++);
     *rid = tuple->GetRid();
+
+    // Dyy:
+    // Well, seems stupid...
+    // use table_iter only to fetch the next tuple RID, assume RID
+    // is always available, then acquire the lock and fetch the tuple again
+    // For different isolation level:
+    //    READ_UNCOMMITTED: never acquire shared lock
+    //    READ_COMMITTED: acquire shared lock and release it after read
+    //    REPEATABLE_READ: acquire shared lock until commit or abort
+    LockInNode(*rid);
+    table_heap_ptr_->GetTuple(*rid, tuple, GetExecutorContext()->GetTransaction());
+    UnlockInNode(*rid);
+
     if ((plan_->GetPredicate() == nullptr) ||
         plan_->GetPredicate()->Evaluate(tuple, plan_->OutputSchema()).GetAs<bool>()) {
       *tuple = GenerateTuple(*tuple);

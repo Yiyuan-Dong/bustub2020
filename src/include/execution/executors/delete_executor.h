@@ -46,6 +46,8 @@ class DeleteExecutor : public AbstractExecutor {
   // Delete from indexes if necessary.
   bool Next([[maybe_unused]] Tuple *tuple, RID *rid) override;
 
+  void LockInNode(RID &rid);
+
   void DeleteTuple(Tuple &tuple, RID &rid);
 
  private:

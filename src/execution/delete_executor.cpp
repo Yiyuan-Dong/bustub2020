@@ -30,6 +30,11 @@ void DeleteExecutor::Init() {
 void DeleteExecutor::DeleteTuple(Tuple &tuple, RID &rid) {
   // Mark delete in table heap
   TableHeap *table_heap_ptr = table_info_->table_.get();
+  TableWriteRecord table_record{rid,
+                                WType::DELETE,
+                                tuple,
+                                table_heap_ptr};
+  GetExecutorContext()->GetTransaction()->AppendTableWriteRecord(table_record);
   table_heap_ptr->MarkDelete(rid, GetExecutorContext()->GetTransaction());
 
   // I think I should also delete tuples from indexes
@@ -38,10 +43,28 @@ void DeleteExecutor::DeleteTuple(Tuple &tuple, RID &rid) {
   for (auto &index_info : index_info_vector_){
     B_PLUS_TREE_INDEX_TYPE *b_plus_tree_index
         = reinterpret_cast<B_PLUS_TREE_INDEX_TYPE*>(index_info->index_.get());
+    IndexWriteRecord index_record{rid,
+                                  plan_->TableOid(),
+                                  WType::DELETE,
+                                  tuple,
+                                  index_info->index_oid_,
+                                  GetExecutorContext()->GetCatalog()};
+    GetExecutorContext()->GetTransaction()->AppendTableWriteRecord(index_record);
     b_plus_tree_index->DeleteEntry(tuple.KeyFromTuple(table_info_->schema_,
                                                       index_info->key_schema_,
                                                       index_info->index_->GetMetadata()->GetKeyAttrs()),
                                    rid, GetExecutorContext()->GetTransaction());
+  }
+}
+
+void DeleteExecutor::LockInNode(RID &rid) {
+  Transaction* txn = GetExecutorContext()->GetTransaction();
+  if (txn->GetSharedLockSet()->find(rid) != txn->GetSharedLockSet()->end()){
+    GetExecutorContext()->GetLockManager()->LockUpgrade(txn, rid);
+    return;
+  }
+  if (txn->GetExclusiveLockSet()->find(rid) == txn->GetExclusiveLockSet()->end()){
+    GetExecutorContext()->GetLockManager()->LockExclusive(txn, rid);
   }
 }
 
@@ -50,6 +73,7 @@ bool DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
     return false;
   }
 
+  LockInNode(*rid);
   DeleteTuple(*tuple, *rid);
   return true;
 }

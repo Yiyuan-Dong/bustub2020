@@ -46,7 +46,12 @@ class ExecutionEngine {
           result_set->push_back(tuple);
         }
       }
-    } catch (Exception &e) {
+    }
+    catch (TransactionAbortException &e){
+      std::cout << e.GetInfo();
+      exec_ctx->GetTransactionManager()->Abort(TransactionManager::GetTransaction(e.GetTransactionId()));
+    }
+    catch (Exception &e) {
       // TODO(student): handle exceptions
     }
 

@@ -18,12 +18,12 @@
 #include <memory>
 #include <mutex>  // NOLINT
 #include <unordered_map>
+#include <set>
 #include <utility>
 #include <vector>
 
 #include "common/rid.h"
 #include "concurrency/transaction.h"
-
 namespace bustub {
 
 class TransactionManager;
@@ -48,6 +48,8 @@ class LockManager {
     std::list<LockRequest> request_queue_;
     std::condition_variable cv_;  // for notifying blocked transactions on this rid
     bool upgrading_ = false;
+    int sharing_count_ = 0;
+    bool is_writing_ = false;
   };
 
  public:
@@ -75,6 +77,8 @@ class LockManager {
    *    is responsible for keeping track of its current locks.
    */
 
+  void check_aborted(Transaction* txn, LockRequestQueue* request_queue);
+
   /**
    * Acquire a lock on RID in shared mode. See [LOCK_NOTE] in header file.
    * @param txn the transaction requesting the shared lock
@@ -82,6 +86,8 @@ class LockManager {
    * @return true if the lock is granted, false otherwise
    */
   bool LockShared(Transaction *txn, const RID &rid);
+
+  bool LockPrepare(Transaction* txn, const RID &rid);
 
   /**
    * Acquire a lock on RID in exclusive mode. See [LOCK_NOTE] in header file.
@@ -107,6 +113,8 @@ class LockManager {
    */
   bool Unlock(Transaction *txn, const RID &rid);
 
+  std::list<LockRequest>::iterator GetIterator(std::list<LockRequest> &request_queue, txn_id_t txn_id);
+
   /*** Graph API ***/
   /**
    * Adds edge t1->t2
@@ -128,8 +136,14 @@ class LockManager {
   /** @return the set of all edges in the graph, used for testing only! */
   std::vector<std::pair<txn_id_t, txn_id_t>> GetEdgeList();
 
+  /** Abort a txn and delete all relative edges */
+  void DeleteNode(txn_id_t txn_id);
+
   /** Runs cycle detection in the background. */
   void RunCycleDetection();
+  /** dfs function */
+  bool dfs(txn_id_t txn_id);
+
 
  private:
   std::mutex latch_;
@@ -140,6 +154,14 @@ class LockManager {
   std::unordered_map<RID, LockRequestQueue> lock_table_;
   /** Waits-for graph representation. */
   std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
+  /** The nodes that is not included in a cycle */
+  std::set<txn_id_t> safe_set_;
+  /** all txns(nodes) */
+  std::set<txn_id_t> txn_set_;
+  /** all suspected txns in one dfs run */
+  std::unordered_set<txn_id_t> active_set_;
+  /** which Record a txn is waiting for, use to notify waiting txn */
+  std::unordered_map<txn_id_t, RID> require_record_;
 };
 
 }  // namespace bustub

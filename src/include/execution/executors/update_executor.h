@@ -75,6 +75,8 @@ class UpdateExecutor : public AbstractExecutor {
     return Tuple(values, &schema);
   }
 
+  void LockInNode(RID &rid);
+
   void UpdateTuple(Tuple &tuple, RID &rid);
 
  private:
