@@ -81,6 +81,8 @@ bool TableHeap::InsertTuple(const Tuple &tuple, RID *rid, Transaction *txn) {
       cur_page = new_page;
     }
   }
+  /** Dyy: modify here! */
+  lock_manager_->LockExclusive(txn, *rid);
   // This line has caused most of us to double-take and "whoa double unlatch".
   // We are not, in fact, double unlatching. See the invariant above.
   cur_page->WUnlatch();

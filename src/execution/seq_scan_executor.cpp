@@ -27,12 +27,11 @@ void SeqScanExecutor::Init() {
 
   RID rid{};
   TablePage *table_page_ptr = reinterpret_cast<TablePage *>(page_ptr);
-  assert(table_page_ptr->GetFirstTupleRid(&rid));
+  table_page_ptr->GetFirstTupleRid(&rid);
 
   bpm_ptr->UnpinPage(first_page_id, false);
 
-
-  table_iter_ = TableIterator(table_heap_ptr_, rid, exec_ctx_->GetTransaction());
+  table_iter_ = TableIterator(table_heap_ptr_, rid, GetExecutorContext()->GetTransaction());
 }
 
 Tuple SeqScanExecutor::GenerateTuple(Tuple &tuple) {
@@ -66,7 +65,7 @@ void SeqScanExecutor::UnlockInNode(RID &rid) {
 
 bool SeqScanExecutor::Next(Tuple *tuple, RID *rid) {
   while (table_iter_ != table_heap_ptr_->End()){
-    *tuple = *(table_iter_++);
+    *tuple = *table_iter_;
     *rid = tuple->GetRid();
 
     // Dyy:
@@ -78,9 +77,12 @@ bool SeqScanExecutor::Next(Tuple *tuple, RID *rid) {
     //    READ_COMMITTED: acquire shared lock and release it after read
     //    REPEATABLE_READ: acquire shared lock until commit or abort
     LockInNode(*rid);
-    table_heap_ptr_->GetTuple(*rid, tuple, GetExecutorContext()->GetTransaction());
+    bool res = table_heap_ptr_->GetTuple(*rid, tuple, GetExecutorContext()->GetTransaction());
     UnlockInNode(*rid);
-
+    table_iter_++;
+    if (!res){
+      continue;
+    }
     if ((plan_->GetPredicate() == nullptr) ||
         plan_->GetPredicate()->Evaluate(tuple, plan_->OutputSchema()).GetAs<bool>()) {
       *tuple = GenerateTuple(*tuple);

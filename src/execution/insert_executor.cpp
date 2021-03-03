@@ -32,13 +32,20 @@ void InsertExecutor::Init() {
   }
 }
 
+/**
+ * Dyy:
+ * We lock the tuple after insertion. Since only after insertion can
+ * we know the RID of that tuple. And we still need to lock the
+ * tuple for isolation reason. We can't lock the tuple after the page
+ * latch is released because as soon as the page latch released, other
+ * txn is able to lock teh inserted tuple. So I add lock operation in
+ * TableHeap::InsertTuple
+ * However, this may cause undetectable deadlock
+ */
 void InsertExecutor::InsertTuple(Tuple &tuple, RID *rid){
   TableHeap *table_heap_ptr = table_metadata_ptr_->table_.get();
-  TableWriteRecord table_record{*rid,
-                                WType::INSERT,
-                                tuple,
-                                table_heap_ptr};
-  GetExecutorContext()->GetTransaction()->AppendTableWriteRecord(table_record);
+  // TableHeap::InsertTuple will add the insert record into txn write set
+  // I also lock that tuple in TableHeap::InsertTuple
   table_heap_ptr->InsertTuple(tuple, rid, GetExecutorContext()->GetTransaction());
   for (auto &index_info:index_info_vector_){
     B_PLUS_TREE_INDEX_TYPE *b_plus_tree_index
@@ -57,21 +64,9 @@ void InsertExecutor::InsertTuple(Tuple &tuple, RID *rid){
   }
 }
 
-void InsertExecutor::LockInNode(RID &rid) {
-  Transaction* txn = GetExecutorContext()->GetTransaction();
-  if (txn->GetSharedLockSet()->find(rid) != txn->GetSharedLockSet()->end()){
-    GetExecutorContext()->GetLockManager()->LockUpgrade(txn, rid);
-    return;
-  }
-  if (txn->GetExclusiveLockSet()->find(rid) == txn->GetExclusiveLockSet()->end()){
-    GetExecutorContext()->GetLockManager()->LockExclusive(txn, rid);
-  }
-}
-
 bool InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
   if (!plan_->IsRawInsert()){
     if (child_executor_ptr_->Next(tuple, rid)){
-      LockInNode(*rid);
       InsertTuple(*tuple, rid);
       return true;
     }
@@ -79,7 +74,6 @@ bool InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
   }
 
   if (iter_ != plan_->RawValues().end()){
-    LockInNode(*rid);
     Tuple insert_tuple(*iter_++, &table_metadata_ptr_->schema_);
     InsertTuple(insert_tuple, rid);
     return true;

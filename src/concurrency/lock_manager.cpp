@@ -70,7 +70,7 @@ bool LockManager::LockShared(Transaction *txn, const RID &rid) {
   if (request_queue->is_writing_){
     request_queue->cv_.wait(lock,
                             [request_queue, txn]()
-                                ->bool{return txn->GetState() != TransactionState::ABORTED ||
+                                ->bool{return txn->GetState() == TransactionState::ABORTED ||
                                                  !request_queue->is_writing_;}
                             );
   }
@@ -141,7 +141,7 @@ bool LockManager::LockUpgrade(Transaction *txn, const RID &rid) {
     request_queue->upgrading_ = true;
     request_queue->cv_.wait(lock,
                             [request_queue, txn]()
-                                ->bool{return txn->GetState() != TransactionState::ABORTED ||
+                                ->bool{return txn->GetState() == TransactionState::ABORTED ||
                                                  (!request_queue->is_writing_ && request_queue->sharing_count_ == 0);}
                             );
   }

@@ -251,4 +251,218 @@ TEST_F(TransactionTest, DISABLED_DirtyReadsTest) {
   delete key_schema;
 }
 
+void ReadThread1(ExecutionEngine *exec_eng, const AbstractPlanNode *plan, Transaction *txn, ExecutorContext *exec_ctx){
+  std::vector<Tuple> result_set{};
+  std::cout << "This scan should be blocked until txn1 abort\n";
+  exec_eng->Execute(plan, &result_set, txn, exec_ctx);
+  ASSERT_EQ(result_set.size(), 3);
+}
+
+// NOLINTNEXTLINE
+TEST_F(TransactionTest, ReadCommitedTest_1) {
+  // txn1: INSERT INTO empty_table2 VALUES (200, 20), (201, 21), (202, 22)
+  // txn2: SELECT * FROM empty_table2;
+  // txn1: Commit
+  auto txn1 = GetTxnManager()->Begin(nullptr, IsolationLevel::READ_UNCOMMITTED);
+  auto exec_ctx1 = std::make_unique<ExecutorContext>(txn1, GetCatalog(), GetBPM(), GetTxnManager(), GetLockManager());
+  // Create Values to insert
+  std::vector<Value> val1{ValueFactory::GetIntegerValue(200), ValueFactory::GetIntegerValue(20)};
+  std::vector<Value> val2{ValueFactory::GetIntegerValue(201), ValueFactory::GetIntegerValue(21)};
+  std::vector<Value> val3{ValueFactory::GetIntegerValue(202), ValueFactory::GetIntegerValue(22)};
+  std::vector<std::vector<Value>> raw_vals{val1, val2, val3};
+  // Create insert plan node
+  auto table_info = exec_ctx1->GetCatalog()->GetTable("empty_table2");
+  InsertPlanNode insert_plan{std::move(raw_vals), table_info->oid_};
+
+  Schema *key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema);
+  //  auto index_info = exec_ctx1->GetCatalog()->CreateIndex<GenericKey<8>, RID, GenericComparator<8>>(
+  //      txn1, "index1", "empty_table2", table_info->schema_, *key_schema, {0}, 8);
+
+  GetExecutionEngine()->Execute(&insert_plan, nullptr, txn1, exec_ctx1.get());
+
+  // Iterate through table to read the tuples.
+  auto txn2 = GetTxnManager()->Begin(nullptr, IsolationLevel::READ_COMMITTED);
+  auto exec_ctx2 = std::make_unique<ExecutorContext>(txn2, GetCatalog(), GetBPM(), GetTxnManager(), GetLockManager());
+  auto &schema = table_info->schema_;
+  auto colA = MakeColumnValueExpression(schema, 0, "colA");
+  auto colB = MakeColumnValueExpression(schema, 0, "colB");
+  auto out_schema = MakeOutputSchema({{"colA", colA}, {"colB", colB}});
+  SeqScanPlanNode scan_plan{out_schema, nullptr, table_info->oid_};
+
+  std::thread read_thread{ReadThread1, GetExecutionEngine(), &scan_plan, txn2, exec_ctx2.get()};
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  GetTxnManager()->Commit(txn1);
+  delete txn1;
+
+  read_thread.join();
+
+  GetTxnManager()->Commit(txn2);
+  delete txn2;
+  delete key_schema;
+}
+
+void ReadThread2(ExecutionEngine *exec_eng, const AbstractPlanNode *plan, Transaction *txn, ExecutorContext *exec_ctx){
+  std::vector<Tuple> result_set{};
+  std::cout << "This scan should be blocked until txn1 abort\n";
+  exec_eng->Execute(plan, &result_set, txn, exec_ctx);
+  ASSERT_EQ(result_set.size(), 0);
+}
+
+// NOLINTNEXTLINE
+TEST_F(TransactionTest, ReadCommitedTest_2) {
+  // txn1: INSERT INTO empty_table2 VALUES (200, 20), (201, 21), (202, 22)
+  // txn2: SELECT * FROM empty_table2;
+  // txn1: abort
+  auto txn1 = GetTxnManager()->Begin(nullptr, IsolationLevel::READ_UNCOMMITTED);
+  auto exec_ctx1 = std::make_unique<ExecutorContext>(txn1, GetCatalog(), GetBPM(), GetTxnManager(), GetLockManager());
+  // Create Values to insert
+  std::vector<Value> val1{ValueFactory::GetIntegerValue(200), ValueFactory::GetIntegerValue(20)};
+  std::vector<Value> val2{ValueFactory::GetIntegerValue(201), ValueFactory::GetIntegerValue(21)};
+  std::vector<Value> val3{ValueFactory::GetIntegerValue(202), ValueFactory::GetIntegerValue(22)};
+  std::vector<std::vector<Value>> raw_vals{val1, val2, val3};
+  // Create insert plan node
+  auto table_info = exec_ctx1->GetCatalog()->GetTable("empty_table2");
+  InsertPlanNode insert_plan{std::move(raw_vals), table_info->oid_};
+
+  Schema *key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema);
+  //  auto index_info = exec_ctx1->GetCatalog()->CreateIndex<GenericKey<8>, RID, GenericComparator<8>>(
+  //      txn1, "index1", "empty_table2", table_info->schema_, *key_schema, {0}, 8);
+
+  GetExecutionEngine()->Execute(&insert_plan, nullptr, txn1, exec_ctx1.get());
+
+  // Iterate through table to read the tuples.
+  auto txn2 = GetTxnManager()->Begin(nullptr, IsolationLevel::READ_COMMITTED);
+  auto exec_ctx2 = std::make_unique<ExecutorContext>(txn2, GetCatalog(), GetBPM(), GetTxnManager(), GetLockManager());
+  auto &schema = table_info->schema_;
+  auto colA = MakeColumnValueExpression(schema, 0, "colA");
+  auto colB = MakeColumnValueExpression(schema, 0, "colB");
+  auto out_schema = MakeOutputSchema({{"colA", colA}, {"colB", colB}});
+  SeqScanPlanNode scan_plan{out_schema, nullptr, table_info->oid_};
+
+  std::thread read_thread{ReadThread2, GetExecutionEngine(), &scan_plan, txn2, exec_ctx2.get()};
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  GetTxnManager()->Abort(txn1);
+  delete txn1;
+
+  read_thread.join();
+
+  GetTxnManager()->Commit(txn2);
+  delete txn2;
+  delete key_schema;
+}
+
+void ReadThread3(ExecutionEngine *exec_eng, const AbstractPlanNode *plan, Transaction *txn, ExecutorContext *exec_ctx, TransactionManager* txn_mgr){
+  std::vector<Tuple> result_set{};
+  exec_eng->Execute(plan, &result_set, txn, exec_ctx);
+  ASSERT_EQ(result_set.size(), 0);
+  // Let txn1 try to insert tuples
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  result_set.clear();
+  exec_eng->Execute(plan, &result_set, txn, exec_ctx);
+  ASSERT_EQ(result_set.size(), 3);
+  txn_mgr->Commit(txn);
+}
+
+// NOLINTNEXTLINE
+TEST_F(TransactionTest, PhantomReadTest) {
+  // txn2: SELECT * FROM empty_table2;
+  // txn1: INSERT INTO empty_table2 VALUES (200, 20), (201, 21), (202, 22)
+  // txn1: Commit
+  // txn2: SELECT * FROM empty_table2;
+
+  // Iterate through table to read the tuples.
+  auto txn2 = GetTxnManager()->Begin(nullptr, IsolationLevel::REPEATABLE_READ);
+  auto exec_ctx2 = std::make_unique<ExecutorContext>(txn2, GetCatalog(), GetBPM(), GetTxnManager(), GetLockManager());
+  auto table_info = exec_ctx2->GetCatalog()->GetTable("empty_table2");
+  auto &schema = table_info->schema_;
+  auto colA = MakeColumnValueExpression(schema, 0, "colA");
+  auto colB = MakeColumnValueExpression(schema, 0, "colB");
+  auto out_schema = MakeOutputSchema({{"colA", colA}, {"colB", colB}});
+  SeqScanPlanNode scan_plan{out_schema, nullptr, table_info->oid_};
+
+  std::thread read_thread{ReadThread3, GetExecutionEngine(), &scan_plan, txn2, exec_ctx2.get(), GetTxnManager()};
+
+  auto txn1 = GetTxnManager()->Begin(nullptr, IsolationLevel::READ_UNCOMMITTED);
+  auto exec_ctx1 = std::make_unique<ExecutorContext>(txn1, GetCatalog(), GetBPM(), GetTxnManager(), GetLockManager());
+  // Create Values to insert
+  std::vector<Value> val1{ValueFactory::GetIntegerValue(200), ValueFactory::GetIntegerValue(20)};
+  std::vector<Value> val2{ValueFactory::GetIntegerValue(201), ValueFactory::GetIntegerValue(21)};
+  std::vector<Value> val3{ValueFactory::GetIntegerValue(202), ValueFactory::GetIntegerValue(22)};
+  std::vector<std::vector<Value>> raw_vals{val1, val2, val3};
+  // Create insert plan node
+
+  InsertPlanNode insert_plan{std::move(raw_vals), table_info->oid_};
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(250));
+  GetExecutionEngine()->Execute(&insert_plan, nullptr, txn1, exec_ctx1.get());
+
+  GetTxnManager()->Commit(txn1);
+  delete txn1;
+  read_thread.join();
+  delete txn2;
+}
+
+void HugeReadThread(ExecutionEngine *exec_eng, const AbstractPlanNode *plan, Transaction *txn, ExecutorContext *exec_ctx){
+  std::vector<Tuple> result_set{};
+  std::cout << "This scan should be blocked until txn1 abort\n";
+  exec_eng->Execute(plan, &result_set, txn, exec_ctx);
+  ASSERT_EQ(result_set.size(), 20000);
+  // Read twice
+  result_set.clear();
+  exec_eng->Execute(plan, &result_set, txn, exec_ctx);
+  ASSERT_EQ(result_set.size(), 20000);
+}
+
+// NOLINTNEXTLINE
+TEST_F(TransactionTest, HugeReadTest) {
+  // txn1: INSERT INTO empty_table2 VALUES (200, 20), (201, 21), (202, 22)
+  // txn2: SELECT * FROM empty_table2;
+  // txn1: Commit
+  auto txn1 = GetTxnManager()->Begin(nullptr, IsolationLevel::READ_UNCOMMITTED);
+  auto exec_ctx1 = std::make_unique<ExecutorContext>(txn1, GetCatalog(), GetBPM(), GetTxnManager(), GetLockManager());
+  // Create Values to insert
+  std::vector<std::vector<Value>> raw_vals{};
+  for (int i = 0; i < 20000; ++i){
+    std::vector<Value> val{ValueFactory::GetIntegerValue(200 + i), ValueFactory::GetIntegerValue(20 + i)};
+    raw_vals.push_back(val);
+  }
+
+
+  // Create insert plan node
+  auto table_info = exec_ctx1->GetCatalog()->GetTable("empty_table2");
+  InsertPlanNode insert_plan{std::move(raw_vals), table_info->oid_};
+
+  Schema *key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema);
+  //  auto index_info = exec_ctx1->GetCatalog()->CreateIndex<GenericKey<8>, RID, GenericComparator<8>>(
+  //      txn1, "index1", "empty_table2", table_info->schema_, *key_schema, {0}, 8);
+
+  GetExecutionEngine()->Execute(&insert_plan, nullptr, txn1, exec_ctx1.get());
+
+  // Iterate through table to read the tuples.
+  auto txn2 = GetTxnManager()->Begin(nullptr, IsolationLevel::REPEATABLE_READ);
+  auto exec_ctx2 = std::make_unique<ExecutorContext>(txn2, GetCatalog(), GetBPM(), GetTxnManager(), GetLockManager());
+  auto &schema = table_info->schema_;
+  auto colA = MakeColumnValueExpression(schema, 0, "colA");
+  auto colB = MakeColumnValueExpression(schema, 0, "colB");
+  auto out_schema = MakeOutputSchema({{"colA", colA}, {"colB", colB}});
+  SeqScanPlanNode scan_plan{out_schema, nullptr, table_info->oid_};
+
+  std::thread read_thread{HugeReadThread, GetExecutionEngine(), &scan_plan, txn2, exec_ctx2.get()};
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  GetTxnManager()->Commit(txn1);
+  delete txn1;
+
+  read_thread.join();
+
+  GetTxnManager()->Commit(txn2);
+  delete txn2;
+  delete key_schema;
+}
+
 }  // namespace bustub

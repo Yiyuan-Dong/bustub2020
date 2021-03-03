@@ -41,11 +41,7 @@ void UpdateExecutor::LockInNode(RID &rid) {
 void UpdateExecutor::UpdateTuple(Tuple &tuple, RID &rid){
   Tuple updated_tuple{GenerateUpdatedTuple(tuple)};
   TableHeap* table_heap_ptr = table_info_->table_.get();
-  TableWriteRecord table_record{rid,
-                                WType::UPDATE,
-                                tuple,
-                                table_heap_ptr};
-  GetExecutorContext()->GetTransaction()->AppendTableWriteRecord(table_record);
+  // UpdateTuple will add the update record into txn write set
   table_heap_ptr->UpdateTuple(updated_tuple, rid, GetExecutorContext()->GetTransaction());
   for (auto &index_info:index_info_vector_){
       B_PLUS_TREE_INDEX_TYPE *b_plus_tree_index

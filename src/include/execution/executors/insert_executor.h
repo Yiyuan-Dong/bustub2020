@@ -46,8 +46,6 @@ class InsertExecutor : public AbstractExecutor {
 
   void InsertTuple(Tuple &insert_tuple, RID *rid);
 
-  void LockInNode(RID &rid);
-
  private:
   /** The insert plan node to be executed. */
   const InsertPlanNode *plan_;

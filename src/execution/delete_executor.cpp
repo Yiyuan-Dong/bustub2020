@@ -30,11 +30,7 @@ void DeleteExecutor::Init() {
 void DeleteExecutor::DeleteTuple(Tuple &tuple, RID &rid) {
   // Mark delete in table heap
   TableHeap *table_heap_ptr = table_info_->table_.get();
-  TableWriteRecord table_record{rid,
-                                WType::DELETE,
-                                tuple,
-                                table_heap_ptr};
-  GetExecutorContext()->GetTransaction()->AppendTableWriteRecord(table_record);
+  // MarkDelete will add the delete record in txn write set
   table_heap_ptr->MarkDelete(rid, GetExecutorContext()->GetTransaction());
 
   // I think I should also delete tuples from indexes
